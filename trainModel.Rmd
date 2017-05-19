@@ -1,0 +1,103 @@
+---
+title: "Practical Machine Learning -- Course project"
+---
+
+## Introduction
+
+The purpose of this project is to use accelerometer data from wearable devices 
+to correctly identify the correct (or incorrect) execution of a barbell lift.
+
+Data is taken from the Weight Lifting Exercises dataset available at http://groupware.les.inf.puc-rio.br/har.
+
+## Load required packages
+
+We will need the caret, rpart, and randomForest packages.
+
+```{r setup}
+library(caret)
+library(rpart)
+library(randomForest)
+
+courseDir <- 'C:\\Users\\Scott\\My Documents\\coursera\\data_science_specialization\\practical_machine_learning\\'
+projectDir <- paste0(courseDir, 'project')
+setwd(projectDir)
+```
+
+## Read training and test data
+
+Read the training and test data from CSV files.
+
+```{r read_data}
+dfTrain <- read.csv('pml-training.csv', na.strings = c("", "NA"))
+dfTest  <- read.csv('pml-testing.csv', na.strings = c("", "NA"))
+```
+
+## Feature reduction
+
+We remove features with bogus data (any NA values) and the first seven features, 
+which are non-informative.
+
+```{r process_features}
+goodFeatures <- colSums(is.na(dfTrain)) == 0
+dfTrain <- dfTrain[, goodFeatures]
+dfTrain <- dfTrain[, -(1:7)]
+```
+
+## Cross-validation set 
+
+Here we create a cross-validation set for model comparison using a 70/30 split.  
+
+```{r create_cv_set}
+trainIdx <- createDataPartition(y = dfTrain$classe, p = 0.7, list = FALSE)
+dfTrainR <- dfTrain[trainIdx, ]  # "reduced" training set
+dfValid  <- dfTrain[-trainIdx, ] # cross-validation set
+```
+
+## Classification tree
+
+Here we fit a classification tree model using all the available features, and
+check its prediction accuracy on the cross-validation set.
+
+```{r tree_fit}
+set.seed(1138)
+treeFit  <- rpart(classe ~ ., data = dfTrainR, method = "class")
+treePred <- predict(treeFit, dfValid, type = "class")
+treeAcc  <- confusionMatrix(treePred, dfValid$classe)$overall[1]
+print(treeAcc)
+```
+
+The accuracy is around 70%, so not great.  This might be a consequence of 
+overfitting, which can be improved with a random forests approach. 
+
+## Random forests
+
+Here we use a random forests approach to fit a classification tree model,
+and check its prediction accuracy on the cross-validation set.
+
+```{r rf_fit}
+set.seed(1138)
+rfFit  <- randomForest(classe ~ ., data = dfTrainR, ntree = 200, importance = TRUE)
+print(rfFit)
+rfPred <- predict(rfFit, dfValid, type = "class")
+rfAcc  <- confusionMatrix(rfPred, dfValid$classe)$overall[1]
+print(rfAcc)
+```
+
+The variable importance plot shows that the belt and dumbbell accelerometers 
+tended to contribute more to the prediction.
+
+```{r rf_fit_var_imp}
+varImpPlot(rfFit)
+```
+
+The out-of-bag error estimate is about 53%, which is an unbiased estimate of the
+test error (out-of-sample error).
+
+## Test set
+
+The random forests model gives the following class predictions on the test set.
+
+```{r test_predictions}
+rfTestPred <- predict(rfFit, dfTest, type = "class")
+print(rfTestPred)
+```
